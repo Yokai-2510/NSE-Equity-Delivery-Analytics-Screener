@@ -1,152 +1,109 @@
-import yaml
+"""
+Utility functions for config loading and logging setup.
+"""
+
+import json
 import logging
-import logging.config
-import signal
-import time
-import functools
-import re
-import os
 from pathlib import Path
-from typing import Dict, Any, Callable, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Global flag for shutdown
-_SHUTDOWN_FLAG = False
 
-# --------------------------------------------------------------------------
-# Configuration & Logging
-# --------------------------------------------------------------------------
-
-def load_config(config_path: str = "config/settings.yaml") -> Dict[str, Any]:
-    """Load application configuration from YAML file."""
+def load_config(config_path: str = "config/settings.json") -> dict:
+    """
+    Load JSON configuration file.
+    Returns the entire config dict.
+    """
     path = Path(config_path)
+    
     if not path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {path.absolute()}")
-        
-    with open(path, 'r') as f:
-        return yaml.safe_load(f)
-
-def setup_logging(config_path: str = "config/logging_config.yaml") -> None:
-    """Configure logging based on YAML configuration."""
-    path = Path(config_path)
-    Path("logs").mkdir(exist_ok=True)
+        raise FileNotFoundError(f"Config file not found: {config_path}")
     
-    if path.exists():
-        with open(path, 'r') as f:
-            try:
-                config = yaml.safe_load(f)
-                logging.config.dictConfig(config)
-                return
-            except Exception as e:
-                print(f"Failed to load logging config: {e}")
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def setup_logging(config: dict) -> None:
+    """
+    Configure file and console logging with sub-second timestamps.
+    """
+    log_config = config.get("logging", {})
+    log_level = log_config.get("level", "INFO")
+    log_file = log_config.get("file", "logs/app.log")
+    console_enabled = log_config.get("console", True)
     
-    # Fallback
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+    # Ensure log directory exists
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Custom format with sub-second precision
+    log_format = "%(asctime)s.%(msecs)03d [%(levelname)s] [%(name)s] %(message)s"
+    date_format = "%Y-%m-%d %H:%M:%S"
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format=log_format,
+        datefmt=date_format,
+        handlers=[]
+    )
+    
+    # File handler
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter(log_format, date_format))
+    logging.getLogger().addHandler(file_handler)
+    
+    # Console handler (optional)
+    if console_enabled:
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(logging.Formatter(log_format, date_format))
+        logging.getLogger().addHandler(console_handler)
 
-# --------------------------------------------------------------------------
-# Date & Input Validation
-# --------------------------------------------------------------------------
 
-def parse_date_string(date_str: str, fmt: str = "%d-%m-%Y") -> datetime:
-    """Strictly parse a date string."""
+def format_date_for_display(date_str: str) -> str:
+    """
+    Convert DD-MM-YYYY to a readable format.
+    Example: "08-02-2025" -> "08 Feb 2025"
+    """
     try:
-        return datetime.strptime(date_str, fmt)
+        dt = datetime.strptime(date_str, "%d-%m-%Y")
+        return dt.strftime("%d %b %Y")
     except ValueError:
-        raise ValueError(f"Invalid date format: {date_str}. Expected {fmt}")
+        return date_str  # Return as-is if parsing fails
 
-def format_date_for_nse(date_obj: datetime) -> str:
-    """Convert datetime to NSE API format (DD-MM-YYYY)."""
-    return date_obj.strftime("%d-%m-%Y")
 
-def validate_symbol(symbol: str) -> bool:
+def validate_date_format(date_str: str) -> bool:
     """
-    Check if symbol format is valid.
-    Rules: Uppercase, Alphanumeric, 1-20 chars.
-    """
-    if not symbol or not isinstance(symbol, str):
-        return False
-    return bool(re.match(r'^[A-Z0-9]{1,20}$', symbol))
-
-def validate_date_range(from_date: str, to_date: str) -> Tuple[bool, str]:
-    """
-    Validate date logical consistency.
-    Returns: (is_valid, error_message)
+    Check if date string matches DD-MM-YYYY format.
     """
     try:
-        start = parse_date_string(from_date)
-        end = parse_date_string(to_date)
-        
-        if start > end:
-            return False, "From Date cannot be after To Date"
-        
-        if end > datetime.now() + timedelta(days=1):
-            return False, "Cannot fetch data for future dates"
-            
-        if (end - start).days > 365:
-            return False, "Date range exceeds 1 year limit"
-            
-        return True, ""
-    except ValueError as e:
-        return False, str(e)
+        datetime.strptime(date_str, "%d-%m-%Y")
+        return True
+    except ValueError:
+        return False
 
-# --------------------------------------------------------------------------
-# File & System Operations
-# --------------------------------------------------------------------------
 
-def cleanup_old_csvs(data_folder: str, max_age_hours: int = 24) -> int:
+def cleanup_old_files(folder: str, max_age_hours: int = 24) -> int:
     """
-    Delete CSV files older than specified hours.
+    Delete files older than max_age_hours from the specified folder.
+    
     Returns count of deleted files.
     """
-    folder = Path(data_folder)
-    if not folder.exists():
+    import time
+    
+    folder_path = Path(folder)
+    if not folder_path.exists():
         return 0
     
+    now = time.time()
+    max_age_seconds = max_age_hours * 3600
     deleted_count = 0
-    cutoff_time = time.time() - (max_age_hours * 3600)
     
-    for file_path in folder.glob("*.csv"):
-        if file_path.stat().st_mtime < cutoff_time:
-            try:
+    for file_path in folder_path.glob("*.csv"):
+        if file_path.is_file():
+            age_seconds = now - file_path.stat().st_mtime
+            if age_seconds > max_age_seconds:
                 file_path.unlink()
                 deleted_count += 1
                 logging.getLogger("utils").debug(f"Deleted old file: {file_path.name}")
-            except Exception as e:
-                logging.getLogger("utils").error(f"Failed to delete {file_path.name}: {e}")
-                
+    
     return deleted_count
-
-def retry_on_failure(max_retries: int = 3, delay: int = 2):
-    """Decorator to retry operations on exception."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
-            for attempt in range(1, max_retries + 1):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_exception = e
-                    logging.getLogger("utils").warning(
-                        f"Attempt {attempt}/{max_retries} failed for {func.__name__}: {e}. Retrying in {delay}s..."
-                    )
-                    time.sleep(delay)
-            raise last_exception
-        return wrapper
-    return decorator
-
-# --------------------------------------------------------------------------
-# Signal Handling
-# --------------------------------------------------------------------------
-
-def register_shutdown_handlers() -> None:
-    signal.signal(signal.SIGINT, _shutdown_handler)
-    signal.signal(signal.SIGTERM, _shutdown_handler)
-
-def _shutdown_handler(signum, frame) -> None:
-    global _SHUTDOWN_FLAG
-    _SHUTDOWN_FLAG = True
-    logging.getLogger("utils").info("Shutdown signal received.")
-
-def is_shutdown_requested() -> bool:
-    return _SHUTDOWN_FLAG

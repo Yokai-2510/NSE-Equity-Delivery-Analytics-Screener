@@ -1,0 +1,58 @@
+{
+  "project": {
+    "instrument": {
+      "type": "EQUITY",
+      "symbol": "RELIANCE",
+      "series": "ALL"
+    },
+    "date_range": {
+      "from_date": "01-01-2025",
+      "to_date": "30-01-2025"
+    }
+  },
+  "nse": {
+    "base_url": "https://www.nseindia.com",
+    "homepage_url": "https://www.nseindia.com",
+    "api_endpoint": "/api/historicalOR/generateSecurityWiseHistoricalData",
+    "timeout_seconds": 20,
+    "headers": {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+      "Accept": "*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://www.nseindia.com/report-detail/eq_security",
+      "X-Requested-With": "XMLHttpRequest",
+      "Connection": "keep-alive"
+    }
+  },
+  "data": {
+    "folder": "data",
+    "cleanup_enabled": true,
+    "max_age_hours": 24,
+    "filename_pattern": "{symbol}_{from_date}_{to_date}.csv"
+  },
+  "google_sheets": {
+    "credentials_file": "config/credentials.json",
+    "spreadsheet_id": "1j-dHdL-9xeLE6mSkTd-XF3OI4mtKnDoV4donfbl80gw",
+    "poll_interval_seconds": 3,
+    "sheet_names": {
+      "raw_data": "RAW_DATA",
+      "custom_view": "CUSTOM_VIEW",
+      "charts": "DELIVERY_CHARTS",
+      "system_status": "SYSTEM_STATUS"
+    },
+    "control_cells": {
+      "symbol": "B4",
+      "from_date": "B5",
+      "to_date": "B6",
+      "trigger": "B7"
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/app.log",
+    "console": true
+  },
+  "system": {
+    "shutdown_timeout_seconds": 10
+  }
+}
