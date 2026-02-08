@@ -1,40 +1,39 @@
-import requests
-from pathlib import Path
+import logging
+import time
+from modules.utils import setup_logging, load_config, register_shutdown_handlers, is_shutdown_requested
 
-URL = "https://www.nseindia.com/api/historicalOR/generateSecurityWiseHistoricalData"
-
-PARAMS = {
-    "from": "08-02-2025",
-    "to": "08-02-2026",
-    "symbol": "RELIANCE",
-    "type": "priceVolumeDeliverable",
-    "series": "ALL",
-    "csv": "true",
-}
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com/report-detail/eq_security",
-    "X-Requested-With": "XMLHttpRequest",
-}
-
-def download_csv():
-    session = requests.Session()
-    session.headers.update(HEADERS)
-
-    # 🔑 Step 1: hit homepage to get cookies (mandatory)
-    session.get("https://www.nseindia.com", timeout=10)
-
-    # 🔑 Step 2: actual API call
-    r = session.get(URL, params=PARAMS, timeout=20)
-    r.raise_for_status()
-
-    out = Path("INFY_historical.csv")
-    out.write_bytes(r.content)
-    print(f"Saved → {out.resolve()}")
+def main():
+        
+    # 1. Setup Infrastructure
+    setup_logging()
+    logger = logging.getLogger("main")
+    
+    try:
+        # 2. Load Configuration
+        config = load_config()
+        logger.info("Configuration loaded successfully.")
+        
+        # 3. Setup Signal Handlers
+        register_shutdown_handlers()
+        logger.info("Signal handlers registered. Press Ctrl+C to test shutdown.")
+        
+        # 4. Verify Settings (Print specific value to prove read worked)
+        nse_url = config['nse']['base_url']
+        sheet_id = config['google_sheets']['spreadsheet_id']
+        logger.info(f"Target NSE URL: {nse_url}")
+        logger.info(f"Target Sheet ID: {sheet_id}")
+        
+        # 5. Simple Keep-Alive Loop (Phase 1 Test)
+        logger.info("Phase 1 System Check: Running... (Waiting for Ctrl+C)")
+        
+        while not is_shutdown_requested():
+            time.sleep(1)
+            
+        logger.info("Main loop exited cleanly.")
+        
+    except Exception as e:
+        logger.critical(f"Fatal startup error: {e}", exc_info=True)
+        exit(1)
 
 if __name__ == "__main__":
-    download_csv()
+    main()
