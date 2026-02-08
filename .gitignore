@@ -1,14 +1,13 @@
-# Security: Ignore credentials and secrets
+# Security
 config/credentials.json
 config/settings.yaml
 .env
 
-# Runtime: Ignore logs and data
-logs/*.log
-data/*.csv
-data/*.xlsx
+# Runtime data (ignore all)
+data/
+logs/
 
-# Python System Files
+# Python
 .venv/
 __pycache__/
 *.pyc
