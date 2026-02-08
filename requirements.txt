@@ -1,0 +1,10 @@
+# Core dependencies
+
+requests
+pandas
+gspread
+oauth2client
+PyYAML
+
+# Utilities
+python-dateutil
